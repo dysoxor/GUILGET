@@ -1,0 +1,11 @@
+*.json
+*.jpg
+*.png
+*.pkl
+*.pyc
+*.h5
+*.log
+*.wandb
+*.txt
+*.pth
+experiments/*
