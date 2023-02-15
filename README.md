@@ -3,7 +3,7 @@
 Pytorch implementation for GUILGET. The goal is to generate scene layout with conceptual and spatial diversity.
 
 ### Overview
-<img src="./figures/archi.png" width="940px" height="360px"/>
+<img src="./figures/archi.png"/>
 
 
 ### Data
