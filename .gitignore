@@ -1,6 +1,5 @@
 *.json
 *.jpg
-*.png
 *.pkl
 *.pyc
 *.h5
