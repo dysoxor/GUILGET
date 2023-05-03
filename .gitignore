@@ -1,10 +1,15 @@
-*.json
 *.jpg
 *.pkl
 *.pyc
 *.h5
 *.log
 *.wandb
-*.txt
+*.yaml
 *.pth
+*.txt
+*.png
+*.json
+*.csv
+!categories.json
 experiments/*
+wandb/*

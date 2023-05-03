@@ -8,7 +8,7 @@ import random
 import torch.nn as nn
 import math
 from .loss import RegLoss, FocalLoss, Log_Pdf, Rel_Loss, RegLoss_position, RegLoss_size, OverlapLoss, OverlapLoss_intra
-import wandb
+#import wandb
 
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -16,6 +16,8 @@ from .scheduler import build_scheduler
 from torch.optim.lr_scheduler import MultiStepLR, ReduceLROnPlateau
 import pickle
 from .iou import IOU_calculator
+
+import gc
 
 
 class PretrainTrainer:    
@@ -95,7 +97,7 @@ class PretrainTrainer:
 
                 
     def train(self):
-        wandb.init(project="Design Inspiration")
+        #wandb.init(project="Design Inspiration")
         opt = self.opt
         all_log = self.all_log
         self.model.to(self.device)
@@ -108,7 +110,7 @@ class PretrainTrainer:
             else: mode = 'w'
             log = self._run_epoch(i, 'train', mode)
             val_log = self._run_epoch(i, 'valid', 'w')
-            wandb.log({**log, **val_log})
+            #wandb.log({**log, **val_log})
             merged_log = {**log, **val_log}
             all_log.append(merged_log)
             if (i + 1)%10 == 0 or val_log['valid_coarse_miou'] > best_val_mIOU:
@@ -175,6 +177,12 @@ class PretrainTrainer:
         
         for batch_idx, (input_token, input_obj_id, output_obj_id, input_parent_id, output_parent_id, coarse_box_label, 
                         output_label, segment_label, token_type)  in enumerate(dataloader):
+            total_memory, used_memory, free_memory = map(
+                int, os.popen('free -t -m').readlines()[-1].split()[1:])
+            
+            # Memory usage
+            #print(50*"=")
+            #print("RAM memory % used before model run:", round((used_memory/total_memory) * 100, 4))
             input_token = input_token.to(self.device) # vocabulary
             input_obj_id = input_obj_id.to(self.device) # input id with mask applied
             output_obj_id = output_obj_id.to(self.device) # answers for mask in input id
@@ -208,8 +216,8 @@ class PretrainTrainer:
             #print("size of trg input box: ", trg_input_box.size())
 
             if phase == 'train':
-                #print("train")
                 box_position_logits, box_size_logits, vocab_logits, obj_id_logits, parent_id_logits, token_type_logits, coarse_box, coarse_gmm, refine_box, refine_gmm = self.model(input_token, input_obj_id, input_parent_id, segment_label, token_type, src_mask, trg_input_box, trg_mask, epoch=epoch, global_mask=global_mask)
+                
             else:
                 #print("inference")
                 box_position_logits, box_size_logits, vocab_logits, obj_id_logits, parent_id_logits, token_type_logits, coarse_box, coarse_gmm, refine_box, refine_gmm = self.model(input_token, input_obj_id, input_parent_id, segment_label, token_type, src_mask, trg_input_box, inference = True, epoch=epoch, global_mask=global_mask)
@@ -270,13 +278,14 @@ class PretrainTrainer:
             if not self.pretrain_encoder:
                 if self.cfg['MODEL']['DECODER']['BOX_LOSS'] == 'PDF':
                     box_loss, kl_loss = self.box_loss(coarse_gmm, coarse_box_label, False, True) 
-                    rel_loss, rel2_loss = self.rel_loss(coarse_gmm, coarse_box_label)
+                    #rel_loss, rel2_loss = self.rel_loss(coarse_gmm, coarse_box_label)
 #                     rel_loss = rel2_loss * 0.
                     box_loss /= input_token.size(0)
                     kl_loss /= input_token.size(0)
-                    rel_loss /= input_token.size(0)
-                    rel2_loss /= input_token.size(0)
-                    
+                    #rel_loss /= input_token.size(0)
+                    rel_loss = 0
+                    #rel2_loss /= input_token.size(0)
+                    rel2_loss = 0
                 else:
                     box_loss, kl_loss = self.box_loss(coarse_box, coarse_box_label)
                     box_loss /= input_token.size(0)
@@ -284,7 +293,6 @@ class PretrainTrainer:
                     rel_loss = 0
                     rel2_loss = 0
                 if self.refine:
-                    
                     if self.cfg['MODEL']['REFINE']['OVERLAP_LOSS']:
                         #print("start overlap")
                         overlap_loss = self.overlapLoss(torch.clone(refine_box), torch.clone(input_obj_id), torch.clone(input_parent_id), torch.clone(trg_type))
@@ -342,7 +350,7 @@ class PretrainTrainer:
                 #print(tot_refi_box_loss)
                 self.encoder_optimizer.zero_grad()
                 self.bbox_head_optimizer.zero_grad()
-                loss.backward()
+                loss.backward(retain_graph = False)
                 self.encoder_scheduler.step_and_update_lr()
                 if not self.pretrain_encoder:
                     self.bbox_head_scheduler.step_and_update_lr()
@@ -409,6 +417,7 @@ class PretrainTrainer:
                      self.idx2vocab(torch.max(vocab_logits[0, :16],\
                             dim=1)[1].detach().cpu().numpy(),0))
             
+            
         acc = (total_correct.float() / total_label.float()).item()
         acc_id = (total_correct_id.float() / total_label_id.float()).item()
         if self.cfg['MODEL']['ENCODER']['PARENT_ID']:
@@ -432,6 +441,7 @@ class PretrainTrainer:
                    total_overlap_loss_intra/len(dataloader),
                    acc, acc_id, acc_parent_id, acc_type, phase, self.encoder_optimizer, 
                    self.bbox_head_optimizer)
+        
         return log
 
     def _calc_acc(self, logits, gt):
@@ -518,7 +528,8 @@ class PretrainTrainer:
                 box_loss = Log_Pdf(reduction='sum',pretrain = True, lambda_xy = 1., lambda_wh = 0., rel_gt = rel_gt, raw_batch_size=raw_batch_size, KD_ON=KD_ON, Topk=Topk)
             else:
                 box_loss = Log_Pdf(reduction='sum',pretrain = True, lambda_xy = 1., lambda_wh = 1., rel_gt = rel_gt, raw_batch_size=raw_batch_size, KD_ON=KD_ON, Topk=Topk)
-            rel_loss = Rel_Loss(reduction = 'sum', raw_batch_size=raw_batch_size)
+            #rel_loss = Rel_Loss(reduction = 'sum', raw_batch_size=raw_batch_size)
+            rel_loss = 0
             position_loss = None
             if self.cfg['MODEL']['PRETRAIN_POSITION']:
                 position_loss = RegLoss_position(lambda_xy = 1.)

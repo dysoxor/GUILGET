@@ -753,12 +753,12 @@ class CLAYLayoutDataset(Dataset):
 
 
 if __name__ == '__main__':
-    instances_json_path = './data/clay_v2/train.json'
-    category_json_path = './data/clay_v2/categories.json'
-    dict_save_path = './data/clay_v2/object_pred_idx_to_name.pkl'
+    instances_json_path = './data/clay/train.json'
+    category_json_path = './data/clay/categories.json'
+    dict_save_path = './data/clay/object_pred_idx_to_name.pkl'
     CLAY = CLAYRelDataset(instances_json_path, category_json_path, dict_save_path,
                sentence_size=128, is_mask=True)
     print(CLAY.vocab['object_pred_idx_to_name'])
-    fn = './data/clay_v2/object_pred_idx_to_name.pkl'
+    fn = './data/clay/object_pred_idx_to_name.pkl'
     with open(fn, 'wb+') as file:
         pickle.dump(CLAY.vocab['object_pred_idx_to_name'], file)

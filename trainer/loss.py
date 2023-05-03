@@ -60,6 +60,7 @@ class RegLoss(nn.Module):
         self.lambda_xy = lambda_xy
         self.lambda_wh = lambda_wh
         self.refine = refine
+        self.clip = True
 
     def forward(self, pred_tensor, target_tensor):
         '''
@@ -70,6 +71,9 @@ class RegLoss(nn.Module):
         if self.pretrain:
             pred_tensor = pred_tensor[1::2]
             new_target_tensor = target_tensor[1::2]
+            if self.clip:
+                pred_tensor[:, [0,2]] = torch.div(torch.round(torch.mul(pred_tensor[:, [0,2]],288)),288)
+                pred_tensor[:, [1,3]] = torch.div(torch.round(torch.mul(pred_tensor[:, [1,3]],512)),512)
             non_ignore_mask = new_target_tensor[:, 0] != 2.
 #                 assert len(non_ignore_mask) % 2 == 0, "pretrain boxes should be paired!"
 #                 pred_tensor_nig = pred_tensor[non_ignore_mask].reshape(-1, 4)
@@ -142,6 +146,15 @@ class Log_Pdf(nn.Module):
         self.grid_size = (8, 8)
         self.KD_ON = KD_ON
         self.Topk = Topk
+        self.mu2 = None
+        self.sigma_2 = None
+        self.kl_loss = None
+        self.topk_mask = None
+        self.sigma_diag_1 = None
+        self.sigma_diag_2 = None
+        self.raw_pdf = None
+        self.xv = None
+        self.yv = None
     
     def forward(self, input_gmm, input_xywh, only_wh, only_xy):
         if not self.rel_gt:
@@ -225,25 +238,25 @@ class Log_Pdf(nn.Module):
         """
         # [t.inverse() for t in torch.functional.split(a,2)
         # torch.stack(b)
-        mu2 = mu1.clone().to(mu1.device)
-        sigma_2 = torch.ones(sigma_1.size()).to(sigma_1.device) * 1.
+        self.mu2 = mu1.clone().to(mu1.device)
+        self.sigma_2 = torch.ones(sigma_1.size()).to(sigma_1.device) * 1.
         total_num = mu1.size(0)
-        kl_loss = torch.Tensor([0]).cuda().squeeze()
+        self.kl_loss = torch.Tensor([0]).cuda().squeeze()
         for i in range(mu1.shape[1]):
 #             sig_pi = pi[:,i]
-            sig_mu1, sig_mu2 = mu1[:,i,:], mu2[:,i,:]
-            sig_sigma_1, sig_sigma_2 = sigma_1[:,i,:], sigma_2[:,i,:]
-            sigma_diag_1 = torch.eye(sig_sigma_1.shape[1]).unsqueeze(0).repeat(total_num,1,1).cuda() * sig_sigma_1.unsqueeze(-1)
-            sigma_diag_2 = torch.eye(sig_sigma_2.shape[1]).unsqueeze(0).repeat(total_num,1,1).cuda() * sig_sigma_2.unsqueeze(-1)
+            sig_mu1, sig_mu2 = mu1[:,i,:], self.mu2[:,i,:]
+            sig_sigma_1, sig_sigma_2 = sigma_1[:,i,:], self.sigma_2[:,i,:]
+            self.sigma_diag_1 = torch.eye(sig_sigma_1.shape[1]).unsqueeze(0).repeat(total_num,1,1).cuda() * sig_sigma_1.unsqueeze(-1)
+            self.sigma_diag_2 = torch.eye(sig_sigma_2.shape[1]).unsqueeze(0).repeat(total_num,1,1).cuda() * sig_sigma_2.unsqueeze(-1)
             # sigma_diag_2_inv = [total_num, 2, 2]
-            sigma_diag_2_inv = sigma_diag_2.inverse()
-            term0 = torch.log(torch.diagonal(sigma_diag_2,dim1=-1,dim2=-2).prod(1) / torch.diagonal(sigma_diag_1,dim1=-1,dim2=-2).prod(1))
+            sigma_diag_2_inv = self.sigma_diag_2.inverse()
+            term0 = torch.log(torch.diagonal(self.sigma_diag_2,dim1=-1,dim2=-2).prod(1) / torch.diagonal(self.sigma_diag_1,dim1=-1,dim2=-2).prod(1))
             term1 = torch.ones(sig_mu1.size(0)).to(sig_mu1.device) * sig_mu1.size(-1)
-            term2 = torch.einsum('bii->b', torch.bmm(sigma_diag_2_inv, sigma_diag_1))
+            term2 = torch.einsum('bii->b', torch.bmm(sigma_diag_2_inv, self.sigma_diag_1))
             term3_0 = torch.bmm((sig_mu2 - sig_mu1).unsqueeze(1), sigma_diag_2_inv)
             term3 = torch.bmm(term3_0, (sig_mu2 - sig_mu1).unsqueeze(-1)).view(-1)
-            kl_loss +=  (0.5 * (term0 - term1 + term2 + term3)).sum()
-        return kl_loss
+            self.kl_loss +=  (0.5 * (term0 - term1 + term2 + term3)).sum()
+        return self.kl_loss
 
 
     def get_gmm_params(self, gmm_params):
@@ -300,8 +313,8 @@ class Log_Pdf(nn.Module):
             k = self.Topk
             distance = ((x-u_x)**2.+(y-u_y)**2.)**0.5
             topk_indice = torch.topk(distance, k, dim=-1, largest=False)[1]
-            topk_mask = torch.zeros(u_x.size()).to(u_x.device)
-            topk_mask = topk_mask.scatter_(1,topk_indice, 1).bool()
+            self.topk_mask = torch.zeros(u_x.size()).to(u_x.device)
+            self.topk_mask = self.topk_mask.scatter_(1,topk_indice, 1).bool()
         
         z_x = ((x-u_x)/sigma_x)**2
         z_y = ((y-u_y)/sigma_y)**2
@@ -316,7 +329,7 @@ class Log_Pdf(nn.Module):
 
         if self.Topk != -1:
 #             raw_pdf = raw_pdf.reshape(batch_size, k)
-            raw_pdf = raw_pdf.cpu()[topk_mask.cpu()].reshape(batch_size, k).cuda()
+            self.raw_pdf = raw_pdf.cpu()[self.topk_mask.cpu()].reshape(batch_size, k).cuda()
         # avoid log(0)
         raw_pdf = torch.log(torch.sum(raw_pdf, dim=1)+1e-5)
 
@@ -329,8 +342,8 @@ class Log_Pdf(nn.Module):
         total_num_grid = grid_size[0]*grid_size[1]
         # calculate the grid center
         grid_center = []
-        xv = torch.arange(start=0.,end=1.,step=1./grid_size[0]).to(gt_x.device)+(1./grid_size[0])/2
-        yv = torch.arange(start=0.,end=1.,step=1./grid_size[1]).to(gt_x.device)+(1./grid_size[1])/2
+        self.xv = torch.arange(start=0.,end=1.,step=1./grid_size[0]).to(gt_x.device)+(1./grid_size[0])/2
+        self.yv = torch.arange(start=0.,end=1.,step=1./grid_size[1]).to(gt_x.device)+(1./grid_size[1])/2
         xv, yv = torch.meshgrid(xv,yv)
         
         x = xv.contiguous().view(-1).unsqueeze(0).unsqueeze(0).repeat(batch, comp_num, 1)
@@ -633,48 +646,49 @@ class XentLoss(nn.Module):
 
 class OverlapLoss(nn.Module):
 
-    def __init__(self, reduction='sum', batch_size=32):
+    def __init__(self, reduction='sum', batch_size=32, sentence_size=128):
         super(OverlapLoss, self).__init__()
         self.reduction = reduction
         self.batch_size = batch_size
 
     def forward(self, pred_boxes, id, parent_id, type_id):
+        
+        sentence_size = id.size(1)
         pred_boxes = pred_boxes.reshape(-1,4)
         pred_boxes = pred_boxes[1::2]
         type_id = type_id[1::2]
+        order = torch.mul(torch.arange(0, id.size(0), device='cuda:0'), sentence_size/2)
+        repeated_tensor = order.repeat_interleave(id.size(1))
+        reshaped_tensor = repeated_tensor.reshape(-1, id.size(1))
+        id = torch.add(id, reshaped_tensor)
+        parent_id = torch.add(parent_id, reshaped_tensor)
+        
         id = id.reshape(id.size(0) * id.size(1))
-        id = id[1::2]
+        id = id[1::2].long()
         parent_id = parent_id.reshape(parent_id.size(0) * parent_id.size(1))
-        parent_id = parent_id[1::2]
+        parent_id = parent_id[1::2].long()
         #non_ignore_mask = type_id[:] != 3
-        sentence_size = int(id.size(0)/self.batch_size)
         pred_boxes_xyxy = self.xcycwh2xyxy(pred_boxes,image_wh=[1440,2560])
-        
-        parents_dict = dict()
-        to_replace = []
-        
         target_boxes_xyxy = torch.clone(pred_boxes_xyxy)
-        for i in range(self.batch_size):
-            parents_dict = dict()
-            to_replace = [] #position to replace
-            removed_from_to_replace = []
-            for j in reversed(range(sentence_size)):
-                parents_dict[int(id[i*sentence_size + j].item())] = pred_boxes_xyxy[i*sentence_size + j] #bounding box corresponding to id
-                for k in range(len(to_replace)): #recheck if we can now replace a parent id
-                    if to_replace[k] not in removed_from_to_replace and int(parent_id[to_replace[k]].item()) in parents_dict.keys(): 
-                        target_boxes_xyxy[to_replace[k]] = parents_dict[int(parent_id[to_replace[k]].item())]
-                        removed_from_to_replace.append(to_replace[k])
-                if int(parent_id[i*sentence_size + j].item()) in parents_dict.keys():
-                    target_boxes_xyxy[i*sentence_size + j] = parents_dict[int(parent_id[i*sentence_size + j].item())]
-                else:
-                    to_replace.append(i*sentence_size + j)
-                    
-            
-                
-        #target_boxes_xyxy = pred_boxes_xyxy[parent_id]
+        unique_types = torch.unique(id)
+        test = torch.clone(unique_types)
+        for i in range(unique_types.shape[0]):
+            test[i] = torch.where(id == unique_types[i])[0][-1]
+        unique_types_parent = parent_id[test.long()]
+        unique_id = torch.clone(unique_types)
+        unique_types_p = torch.unique(torch.where(id == unique_types.view(-1,1))[0])
+        for i in range(unique_types_p.shape[0]):
+            unique_id[i] = torch.where(id == unique_types.view(-1,1))[1][torch.where(torch.where(id == unique_types.view(-1,1))[0] == unique_types_p[i])[0][-1]]
         
-
-        total_iou = self.get_iou(pred_boxes_xyxy[id!=0,:], target_boxes_xyxy[id!=0,:])
+        pred_boxes_xyxy = pred_boxes_xyxy[unique_id.long()]
+        unique_id = torch.clone(unique_types_parent)
+        unique_types_p = torch.unique(torch.where(id == unique_types_parent.view(-1,1))[0])
+        for i in range(unique_types_p.shape[0]):
+            unique_id[i] = torch.where(id == unique_types_parent.view(-1,1))[1][torch.where(torch.where(id == unique_types_parent.view(-1,1))[0] == unique_types_p[i])[0][-1]]
+        
+        target_boxes_xyxy = target_boxes_xyxy[unique_id.long()]
+        
+        total_iou = self.get_iou(pred_boxes_xyxy[unique_types%(sentence_size/2)!=0,:], target_boxes_xyxy[unique_types%(sentence_size/2)!=0,:])
         if self.reduction == 'sum':
             return len(target_boxes_xyxy)-total_iou
         else:
@@ -749,61 +763,70 @@ class OverlapLoss(nn.Module):
     
 class OverlapLoss_intra(nn.Module):
 
-    def __init__(self, reduction='sum', batch_size=32):
+    def __init__(self, reduction='sum', batch_size=32, sentence_size=128):
         super(OverlapLoss_intra, self).__init__()
         self.reduction = reduction
         self.batch_size = batch_size
 
     def forward(self, pred_boxes, id, parent_id, type_id):
+
+        sentence_size = id.size(1)
         pred_boxes = pred_boxes.reshape(-1,4)
         pred_boxes = pred_boxes[1::2]
         type_id = type_id[1::2]
+        order = torch.mul(torch.arange(0, id.size(0), device='cuda:0'), sentence_size/2)
+        repeated_tensor = order.repeat_interleave(id.size(1))
+        reshaped_tensor = repeated_tensor.reshape(-1, id.size(1))
+        id = torch.add(id, reshaped_tensor)
+        parent_id = torch.add(parent_id, reshaped_tensor)
+        
         id = id.reshape(id.size(0) * id.size(1))
-        id = id[1::2]
+        id = id[1::2].long()
         parent_id = parent_id.reshape(parent_id.size(0) * parent_id.size(1))
-        parent_id = parent_id[1::2]
+        parent_id = parent_id[1::2].long()
         #non_ignore_mask = type_id[:] != 3
-        sentence_size = int(id.size(0)/self.batch_size)
         pred_boxes_xyxy = self.xcycwh2xyxy(pred_boxes,image_wh=[1440,2560])
         target_boxes_xyxy = torch.clone(pred_boxes_xyxy)
+        #print("old pred boxes")
+        #print(pred_boxes_xyxy)
+
+        unique_types = torch.unique(id)
+        test = torch.clone(unique_types)
+        for i in range(unique_types.shape[0]):
+            test[i] = torch.where(id == unique_types[i])[0][-1]
+        unique_types_parent = parent_id[test.long()]
+        unique_parent, _ = torch.unique(unique_types_parent, return_counts=True)
         
-        new_pred_list = []
-        new_target_list = []
-        for i in range(self.batch_size):
-            new_id_list = []
-            
-            id_by_parent = dict()
-            coord_by_id = dict()
-            for j in reversed(range(sentence_size)):
-                if int(parent_id[i*sentence_size + j].item()) not in id_by_parent.keys() and int(parent_id[i*sentence_size + j].item()) != 0 and int(id[i*sentence_size + j].item()) != 0:
-                    id_by_parent[int(parent_id[i*sentence_size + j].item())] = [int(id[i*sentence_size + j].item())]
-                    coord_by_id[int(id[i*sentence_size + j].item())] = i*sentence_size + j
-                elif int(parent_id[i*sentence_size + j].item()) != 0 and int(id[i*sentence_size + j].item()) != 0 and int(id[i*sentence_size + j].item()) not in id_by_parent[int(parent_id[i*sentence_size + j].item())]:
-                    id_by_parent[int(parent_id[i*sentence_size + j].item())].append(int(id[i*sentence_size + j].item()))
-                    coord_by_id[int(id[i*sentence_size + j].item())] = i*sentence_size + j
-            for k in id_by_parent.keys():
-                for a in range(len(id_by_parent[k])):
-                    for b in range(a+1, len(id_by_parent[k])):
-                        new_pred_list.append(pred_boxes_xyxy[coord_by_id[id_by_parent[k][a]]].tolist())
-                        new_target_list.append(pred_boxes_xyxy[coord_by_id[id_by_parent[k][b]]].tolist())
-        extra_pred = []
-        extra_target = []
-        for i in range(len(new_pred_list)):
-            if i < pred_boxes_xyxy.size(dim=0):
-                for j in range(len(new_pred_list[i])):
-                
-                    pred_boxes_xyxy[i,j] = new_pred_list[i][j]
-                    target_boxes_xyxy[i,j] = new_target_list[i][j]
-                    
-            else:
-                extra_pred.append(new_pred_list[i])
-                extra_target.append(new_target_list[i])
-                
-        if len(extra_pred)>0:
-            pred_boxes_xyxy = torch.cat((pred_boxes_xyxy, torch.tensor(extra_pred).cuda()), 0)
-            target_boxes_xyxy = torch.cat((target_boxes_xyxy, torch.tensor(extra_target).cuda()), 0)
+        x1_list = []
+        x2_list = []
         
-        total_iou = self.get_iou(pred_boxes_xyxy[0:len(new_pred_list)], target_boxes_xyxy[0:len(new_pred_list)])
+        it = 0
+        for i in range(unique_parent.shape[0]):
+            unique_id_by_parent = unique_types[torch.where(unique_types_parent==unique_parent[i])[0]]
+            k = unique_id_by_parent.size(0) - 1
+            k_p = k
+            while k > 0:
+                x1_list.append(unique_id_by_parent[(unique_id_by_parent.size(0) - 1 - k)])
+                x2_list.append(unique_id_by_parent[(unique_id_by_parent.size(0) - k_p)])
+                k_p -= 1
+                if k_p == 0:
+                    k -= 1
+                    k_p = k
+                it += 1
+        x1 = torch.tensor(x1_list, dtype=torch.int, device='cuda:0')
+        x2 = torch.tensor(x2_list, dtype=torch.int, device='cuda:0')
+        unique_id = torch.clone(x1)
+        unique_types_p = torch.unique(torch.where(id == x1.view(-1,1))[0])
+        for i in range(unique_types_p.shape[0]):
+            unique_id[i] = torch.where(id == x1.view(-1,1))[1][torch.where(torch.where(id == x1.view(-1,1))[0] == unique_types_p[i])[0][-1]]
+        pred_boxes_xyxy = pred_boxes_xyxy[unique_id.long()]
+        
+        unique_id = torch.clone(x2)
+        unique_types_p = torch.unique(torch.where(id == x2.view(-1,1))[0])
+        for i in range(unique_types_p.shape[0]):
+            unique_id[i] = torch.where(id == x2.view(-1,1))[1][torch.where(torch.where(id == x2.view(-1,1))[0] == unique_types_p[i])[0][-1]]
+        target_boxes_xyxy = target_boxes_xyxy[unique_id.long()]
+        total_iou = self.get_iou(pred_boxes_xyxy, target_boxes_xyxy)
         if self.reduction == 'sum':
             return total_iou
         else:

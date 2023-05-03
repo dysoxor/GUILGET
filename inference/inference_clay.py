@@ -358,7 +358,48 @@ class Inference_CLAY():
         Returns:
             string: relation
         """
-        center1 = self.get_center(box1)
+        bb1 = [i for i in box1]
+        bb2 = [i for i in box2]
+        
+        bb1[0] = max(0, bb1[0])
+        bb1[1] = max(0, bb1[1])
+        bb1[2] = min(1440, bb1[2])
+        bb1[3] = min(2560, bb1[3])
+        
+        bb2[0] = max(0, bb2[0])
+        bb2[1] = max(0, bb2[1])
+        bb2[2] = min(1440, bb2[2])
+        bb2[3] = min(2560, bb2[3])
+        
+        
+        right = max(-1, bb1[0] - bb2[2])
+        left = max(-1, bb2[0] - bb1[2])
+        below = max(-1, bb1[1] - bb2[3])
+        above = max(-1, bb2[1] - bb1[3])
+        
+        res = max(right, left)
+        res = max(res, below)
+        res = max(res, above)
+        
+        if res == -1:
+            right = max(-1, bb1[2] - bb2[2])
+            left = max(-1, bb2[0] - bb1[0])
+            below = max(-1, bb1[3] - bb2[3])
+            above = max(-1, bb2[1] - bb1[1])
+            
+            res = max(right, left)
+            res = max(res, below)
+            res = max(res, above)
+        
+        if res == right:
+            return "right"
+        elif res == left:
+            return "left"
+        elif res == below:
+            return "below"
+        else:
+            return "above"
+        """center1 = self.get_center(box1)
         center2 = self.get_center(box2)
         if abs(center1[0] - center2[0]) > abs(center1[1] - center2[1]):
             if center1[0] > center2[0]:
@@ -370,6 +411,7 @@ class Inference_CLAY():
                 return "below"
             else:
                 return "above"
+        """
         
     def write_json(self, sentence, class_ids, log_file_name, name=None, idx=None, boxes=None, parents_id=None):
         out_dict = dict()

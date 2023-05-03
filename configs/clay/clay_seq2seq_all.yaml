@@ -44,8 +44,8 @@ MODEL:
         WEIGHT_REFINE_BOX_LOSS: 1.
         WEIGHT_POSITION_LOSS: 0.5
         WEIGHT_SIZE_LOSS: 0.5
-        WEIGHT_OVERLAP_LOSS: 0.1
-        WEIGHT_OVERLAP_LOSS_INTRA: 0.1
+        WEIGHT_OVERLAP_LOSS: 0.6
+        WEIGHT_OVERLAP_LOSS_INTRA: 0.6
         KD_LOSS: True
         TOPK: 5
 DATASETS:
@@ -61,7 +61,7 @@ DATALOADER:
 SOLVER:
     EPOCHS: 50
     BATCH_SIZE: 32
-    PRETRAIN_WEIGHT: './experiments/clay_pretrain_bothOverlap/checkpoint_50_0.0.pth'
+    PRETRAIN_WEIGHT: './experiments/clay_pretrain_grid/checkpoint_50_0.0.pth'
     ENCODER:
         LR_SCHEDULER: 'BertScheduler'   # BaseScheduler, ChrisScheduler, BertScheduler
         WARMUP_RATIO: 0.
@@ -78,11 +78,11 @@ SOLVER:
         MIN_LR: 0.0000000001
 OUTPUT:
     NUM_STEPS_SHOW_LOSS: 100
-    OUTPUT_DIR: 'experiments/clay_seq2seq_bothOverlap'
+    OUTPUT_DIR: 'experiments/clay_seq2seq_grid'
 TEST:
     MODE: 'model'
     TEST_IS_MASK: False
-    LAYOUT_MODE: 'experiments/clay_seq2seq_bothOverlap/test_8/layout'
+    LAYOUT_MODE: 'experiments/clay_seq2seq_grid/test_1/layout'
     RANDOM: False
     SAMPLE_IDX: -1
-    OUTPUT_DIR: 'experiments/clay_seq2seq_bothOverlap/test_8/'
+    OUTPUT_DIR: 'experiments/clay_seq2seq_grid/test_1/'

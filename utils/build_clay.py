@@ -272,8 +272,7 @@ def get_relation(box1, box2):
     bb2[1] = max(0, bb2[1])
     bb2[2] = min(1440, bb2[2])
     bb2[3] = min(2560, bb2[3])
-    center1 = get_center(bb1)
-    center2 = get_center(bb2)
+    
     
     right = max(-1, bb1[0] - bb2[2])
     left = max(-1, bb2[0] - bb1[2])
@@ -303,7 +302,10 @@ def get_relation(box1, box2):
     else:
         return "above"
     
-    """if abs(center1[0] - center2[0]) > abs(center1[1] - center2[1]):
+    """
+    center1 = get_center(bb1)
+    center2 = get_center(bb2)
+    if abs(center1[0] - center2[0]) > abs(center1[1] - center2[1]):
         if center1[0] > center2[0]:
             return "right"
         else:
@@ -521,7 +523,7 @@ def random_skip_layer_augmentation(obj_maps,scene_graph,objects):
     return relationships, objects
 
 def main():
-    directory = '../data/screenshots/combined'
+    directory = '../data/combined'
     df = pd.read_csv('../data/clay/clay_labels.csv')
     run_old = False
     with open('../data/clay/split_train_id.txt') as f:

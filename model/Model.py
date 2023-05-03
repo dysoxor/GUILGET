@@ -9,6 +9,7 @@ from torch import Tensor
 import numpy as np
 from transformers import BertModel, BertTokenizer
 import torch
+import os
 
 class Layout_Transformer(nn.Module):
     """
@@ -429,9 +430,10 @@ class Rel2Bbox(nn.Module):
                 self.bbox_head.inference(encoder_output, src_mask, src, class_embeds,
                                          global_mask, trg_input_box, input_obj_id)
             else:
+                
                 coarse_box, coarse_gmm, refine_box, refine_gmm = \
                 self.bbox_head(epoch, encoder_output, src_mask, 
                                src, class_embeds, trg_input_box, trg_mask, global_mask, input_obj_id)
-
+            
             return box_position_logits, box_size_logits, vocab_logits, obj_id_logits, parent_id_logits, token_type_logits, coarse_box, coarse_gmm, refine_box, refine_gmm
             
