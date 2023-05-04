@@ -31,7 +31,7 @@ pip install -r requirements.txt
     ```
     - Generate statistics for GMM:
     ```
-    python inference/inference_clay.py
+    python loader/CLAYDataset.py
     ```
 
 ### Training
