@@ -28,6 +28,29 @@ class Linear_head(nn.Module):
         xy = x[:, :, :2]
         wh = x[:, :, 2:]
         return wh, xy, None, None , None
+
+class Linear_head_grid(nn.Module):
+    def __init__(self, input_dim, box_dim, output_dim):
+        super(Linear_head_grid, self).__init__()
+        self.box_emb_size = 64
+        self.box_embedding = nn.Linear(box_dim, self.box_emb_size)
+        self.dense = nn.Linear(input_dim+self.box_emb_size, self.box_emb_size)
+        self.feed_forward = nn.Linear(self.box_emb_size, output_dim*8*14)
+        self.activation = nn.Softmax(dim=-1)
+        self.feed_forward_2 = nn.Linear(output_dim*8*14+input_dim, output_dim)
+        self.activation_2 = nn.Sigmoid()
+
+    def forward(self, x_input, box):
+        box_embed = self.box_embedding(box)
+        x = torch.cat((x_input, box_embed), dim=-1)
+        x = self.dense(x)
+        x = self.feed_forward(x+box_embed)
+        x = self.activation(x)
+        x = self.feed_forward_2(torch.cat((x_input, x), dim=-1))
+        x = self.activation_2(x)
+        xy = x[:, :, :2]
+        wh = x[:, :, 2:]
+        return wh, xy, None, None , None
     
 class Decoder_Linear_head(nn.Module):
     def __init__(self, input_dim, box_dim):
@@ -373,6 +396,7 @@ class BBox_Head(nn.Module):
             elif cfg['MODEL']['REFINE']['HEAD_TYPE'] == 'GMM':
                 self.refine_box_head = GMM_head(hidden_size, condition=True,
                                            X_Softmax=False, greedy=False)
+        
 
 
     

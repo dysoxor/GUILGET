@@ -59,9 +59,9 @@ DATALOADER:
     NUM_WORKER: 0
     OBJ_ID_MODULE_V2: False
 SOLVER:
-    EPOCHS: 50
+    EPOCHS: 100
     BATCH_SIZE: 32
-    PRETRAIN_WEIGHT: './experiments/clay_pretrain_grid/checkpoint_50_0.0.pth'
+    PRETRAIN_WEIGHT: './experiments/clay_pretrain_upsample_manual/checkpoint_50_0.0.pth'
     ENCODER:
         LR_SCHEDULER: 'BertScheduler'   # BaseScheduler, ChrisScheduler, BertScheduler
         WARMUP_RATIO: 0.
@@ -78,11 +78,11 @@ SOLVER:
         MIN_LR: 0.0000000001
 OUTPUT:
     NUM_STEPS_SHOW_LOSS: 100
-    OUTPUT_DIR: 'experiments/clay_seq2seq_grid'
+    OUTPUT_DIR: 'experiments/clay_seq2seq_upsample_manual'
 TEST:
     MODE: 'model'
     TEST_IS_MASK: False
-    LAYOUT_MODE: 'experiments/clay_seq2seq_grid/test_1/layout'
+    LAYOUT_MODE: 'experiments/clay_seq2seq_upsample_manual/test_1/layout'
     RANDOM: False
     SAMPLE_IDX: -1
-    OUTPUT_DIR: 'experiments/clay_seq2seq_grid/test_1/'
+    OUTPUT_DIR: 'experiments/clay_seq2seq_upsample_manual/test_1/'

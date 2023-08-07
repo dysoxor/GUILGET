@@ -523,16 +523,16 @@ def random_skip_layer_augmentation(obj_maps,scene_graph,objects):
     return relationships, objects
 
 def main():
-    directory = '../data/combined'
-    df = pd.read_csv('../data/clay/clay_labels.csv')
+    directory = './data/clay/combined'
+    df = pd.read_csv('./data/clay/clay_labels.csv')
     run_old = False
-    with open('../data/clay/split_train_id.txt') as f:
+    with open('./data/clay/split_train_id.txt') as f:
         temp = f.readlines()
         train_ids = [int(x) for x in temp]
-    with open('../data/clay/split_dev_id.txt') as f:
+    with open('./data/clay/split_dev_id.txt') as f:
         temp = f.readlines()
         dev_ids = [int(x) for x in temp]
-    with open('../data/clay/split_test_id.txt') as f:
+    with open('./data/clay/split_test_id.txt') as f:
         temp = f.readlines()
         test_ids = [int(x) for x in temp]
 	#image1 = cv2.imread("./data/screenshots/combined/4.jpg")
@@ -691,8 +691,8 @@ def main():
                     dictionary ={
                         "objects" : objects,
                         "relationships" : relationships,
-                        "width": 1440,
-                        "height": 2560,
+                        "width": 288,
+                        "height": 512,
                         "id":int(name.split("/")[-1]),
                         "path":str(name.split("/")[-1]+".jpg")
                     }
@@ -706,8 +706,8 @@ def main():
                     dictionary2 ={
                         "objects" : objects,
                         "relationships" : relationships2,
-                        "width": 1440,
-                        "height": 2560,
+                        "width": 288,
+                        "height": 512,
                         "id":int(name.split("/")[-1])+100000,
                         "path":str(str(int(name.split("/")[-1])+100000)+".jpg")
                     }
@@ -721,8 +721,8 @@ def main():
     print("train size: ", len(train_list))   
     print("test size: ", len(test_list))         
       
-    write_json(train_list, filename="../data/clay/train.json")
-    write_json(test_list, filename="../data/clay/test.json")
+    write_json(train_list, filename="./data/clay/train2.json")
+    write_json(test_list, filename="./data/clay/test2.json")
 
 
 if __name__ == "__main__":

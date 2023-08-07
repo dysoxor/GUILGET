@@ -278,20 +278,20 @@ class PretrainTrainer:
             if not self.pretrain_encoder:
                 if self.cfg['MODEL']['DECODER']['BOX_LOSS'] == 'PDF':
                     box_loss, kl_loss = self.box_loss(coarse_gmm, coarse_box_label, False, True) 
-                    #rel_loss, rel2_loss = self.rel_loss(coarse_gmm, coarse_box_label)
+                    rel_loss, rel2_loss = self.rel_loss(coarse_gmm, coarse_box_label)
 #                     rel_loss = rel2_loss * 0.
                     box_loss /= input_token.size(0)
                     kl_loss /= input_token.size(0)
-                    #rel_loss /= input_token.size(0)
-                    rel_loss = 0
-                    #rel2_loss /= input_token.size(0)
-                    rel2_loss = 0
+                    rel_loss /= input_token.size(0)
+                    #rel_loss = 0
+                    rel2_loss /= input_token.size(0)
+                    #rel2_loss = 0
                 else:
                     box_loss, kl_loss = self.box_loss(coarse_box, coarse_box_label)
                     box_loss /= input_token.size(0)
                     kl_loss /= input_token.size(0)
-                    rel_loss = 0
-                    rel2_loss = 0
+                    #rel_loss = 0
+                    #rel2_loss = 0
                 if self.refine:
                     if self.cfg['MODEL']['REFINE']['OVERLAP_LOSS']:
                         #print("start overlap")
@@ -528,8 +528,8 @@ class PretrainTrainer:
                 box_loss = Log_Pdf(reduction='sum',pretrain = True, lambda_xy = 1., lambda_wh = 0., rel_gt = rel_gt, raw_batch_size=raw_batch_size, KD_ON=KD_ON, Topk=Topk)
             else:
                 box_loss = Log_Pdf(reduction='sum',pretrain = True, lambda_xy = 1., lambda_wh = 1., rel_gt = rel_gt, raw_batch_size=raw_batch_size, KD_ON=KD_ON, Topk=Topk)
-            #rel_loss = Rel_Loss(reduction = 'sum', raw_batch_size=raw_batch_size)
-            rel_loss = 0
+            rel_loss = Rel_Loss(reduction = 'sum', raw_batch_size=raw_batch_size)
+            #rel_loss = 0
             position_loss = None
             if self.cfg['MODEL']['PRETRAIN_POSITION']:
                 position_loss = RegLoss_position(lambda_xy = 1.)

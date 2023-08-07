@@ -420,7 +420,7 @@ class Inference_CLAY():
         out_dict['objects'] = [{"box":None, "class": None, "parent":None} for i in range(max(class_ids))]
         out_dict['relationships'] = []
         for i in range(1, len(sentence), 4):
-            if sentence[i+1] == '[SEP]':
+            if sentence[i] == '[PAD]':
                 break
             out_dict['objects'][int(class_ids[i]-1)]["class"] = sentence[i]
             out_dict['objects'][int(class_ids[i]-1)]["box"] = boxes[i].tolist()

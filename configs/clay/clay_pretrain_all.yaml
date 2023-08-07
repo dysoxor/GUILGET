@@ -72,11 +72,11 @@ SOLVER:
         MIN_LR: 0.00000001
 OUTPUT:
     NUM_STEPS_SHOW_LOSS: 100
-    OUTPUT_DIR: 'experiments/clay_pretrain_grid'
+    OUTPUT_DIR: 'experiments/clay_pretrain_upsample_manual'
 TEST:
     MODE: 'model'
     TEST_IS_MASK: False
-    LAYOUT_MODE: 'experiments/clay_seq2seq_grid/test_1/layout'
+    LAYOUT_MODE: 'experiments/clay_seq2seq_upsample_manual/test_1/layout'
     RANDOM: False
     SAMPLE_IDX: -1
-    OUTPUT_DIR: 'experiments/clay_pretrain_grid/test_1/'
+    OUTPUT_DIR: 'experiments/clay_pretrain_upsample_manual/test_1/'

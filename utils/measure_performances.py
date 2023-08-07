@@ -509,6 +509,20 @@ def get_inference_json(data, jsons_path, type_box):
             output.append(temp)
     return output
 
+def read_json(path):
+    output = open(path)
+    temp = json.load(output)
+    output.close()
+    for screen in range(len(temp)):
+        for b in range(len(temp[screen]['objects'])):
+            if temp[screen]['objects'][b]['box'] != None:
+                temp[screen]['objects'][b]['box'][0] *= 2
+                temp[screen]['objects'][b]['box'][1] *= 2
+                temp[screen]['objects'][b]['box'][2] *= 2
+                temp[screen]['objects'][b]['box'][3] *= 2
+                temp[screen]['objects'][b]["parent"] -= 1
+    return temp
+
 
 def get_center(box):
     """return center of the bounding box
@@ -584,7 +598,7 @@ def plot_metrics_by_type(df, file_name):
     ax.figure.savefig(file_name)
 
 def main():
-    path_gt = "../data/clay/test.json"
+    path_gt = "./data/clay/test.json"
     f = open(path_gt)
     data = json.load(f)
     f.close()
@@ -617,7 +631,8 @@ def main():
     tot_alignment_loss, avg_alignment_loss = alignment(data)
     tot_full_alignment_loss, avg_full_alignment_loss = full_alignment(data)
     
-    data_inference = get_inference_json(data, "../layoutTransformer/experiments/clay_seq2seq_bothOverlap/test_4/sg2im_json", "_r")
+    #data_inference = get_inference_json(data, "../layoutTransformer/experiments/clay_seq2seq_bothOverlap/test_4/sg2im_json", "_r")
+    data_inference = read_json("upsample.json")
     #data_inference = get_inference_json(data, "../sg2im/output_jsonV2", "_r")
     
     
@@ -629,7 +644,7 @@ def main():
     total_unique_matches, avg_unique_matches, with_threshold = unique_matches_find(data, data_inference)
     total_sg, avg_sg = scene_graphs_matching(data, data_inference)
     
-    measure_influence = True
+    measure_influence = False
     
     if measure_influence:
         app_details_path = "../data/clay/app_details.csv"
@@ -712,7 +727,7 @@ def main():
         type_influence_df = pd.DataFrame({"Type": data_type, "Overlap CP": data_type_parent_overlap, "Overlap CC": data_type_components_overlap, "Alignment": data_type_alignment, "W bbox": data_type_wbox, "DocSim": data_type_docsim, "SG error": data_type_sg_error})
         plot_metrics_by_type(type_influence_df, "../layoutTransformer/experiments/clay_seq2seq_bothOverlap/performances_type6.png")
     
-    with open('../layoutTransformer/experiments/clay_seq2seq_bothOverlap/performances_test44.txt', 'w') as f:
+    with open('performances_test44.txt', 'w') as f:
     #with open('../sg2im/performances_test4.txt', 'w') as f:
         f.write("|")
         f.write("Total overlap IoU with parents in Real data: ")

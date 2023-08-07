@@ -60,7 +60,7 @@ class RegLoss(nn.Module):
         self.lambda_xy = lambda_xy
         self.lambda_wh = lambda_wh
         self.refine = refine
-        self.clip = True
+        self.clip = False
 
     def forward(self, pred_tensor, target_tensor):
         '''
